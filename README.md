@@ -1,6 +1,6 @@
 # SmartLinkAPI
 
-[![Python](https://img.shields.io/badge/Python-3.13%2B-blue)](www.python.org) ![FastAPI](https://img.shields.io/badge/Framework-FastAPI-green) [![CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](http://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Python](https://img.shields.io/badge/Python-3.13%2B-blue)](www.python.org) ![FastAPI](https://img.shields.io/badge/Framework-FastAPI-green) [![CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](http://creativecommons.org/licenses/by-nc-sa/4.0/) [![AI-DECLARATION: none](https://img.shields.io/badge/䷼%20AI--DECLARATION-none-dcfce7?labelColor=dcfce7)](https://ai-declaration.md)
 
 Прокси на UserSide API 3.21+ со своей системой авторизации.
 Часть функционала работает не через API, так как там реализованы не все фичи что есть на сайте (как бы они есть, но там надо делать несколько запросов, из-за чего запрос выполняется гораздо дольше). Скрипт авторизовывается на сайте, парсит готовый html и преобразует его в JSON.
