@@ -11,20 +11,8 @@ from sqlalchemy.orm import Session
 from app.api.addata import set_adddata
 from app.api.attach import get_task_attachs, upload_attach
 from app.api.customer import get_customer as api_get_customer
-from app.api.inventory import (
-    get_employee_items,
-    get_task_items,
-    split_inventory,
-    transfer_inventory
-)
-from app.api.task import (
-    add_comment,
-    add_task,
-    change_status,
-    get_task,
-    get_task_ids,
-    get_tasks
-)
+from app.api.inventory import get_employee_items, get_task_items, split_inventory, transfer_inventory
+from app.api.task import add_comment, add_task, change_status, get_task, get_task_ids, get_tasks
 from app.db.crud import get_division_name, get_employee_name
 from app.db.models import Employee
 from app.enums import AddataObjectType, AttachObjectType, TaskType
@@ -37,14 +25,8 @@ router = APIRouter(prefix="/tasks")
 
 
 @router.get("/{id}")
-def api_get_task(
-    id: int, get_customer: bool = False, db: Session = Depends(db_dependency)
-):
-    task = get_task(
-        id,
-        lambda id: get_employee_name(db, id),
-        division_resolver=lambda id: get_division_name(db, id)
-    )
+def api_get_task(id: int, get_customer: bool = False, db: Session = Depends(db_dependency)):
+    task = get_task(id, lambda id: get_employee_name(db, id), division_resolver=lambda id: get_division_name(db, id))
 
     if task is None:
         return JSONResponse({"detail": "task not found"}, 404)
@@ -69,9 +51,7 @@ def api_get_task_items(id: int):
 
 
 @router.post("/{id}/items", status_code=204)
-def api_post_task_items(
-    id: int, items: str, employee: Employee = Depends(employee_dependency)
-):
+def api_post_task_items(id: int, items: str, employee: Employee = Depends(employee_dependency)):
     if employee.inventory_id is None:
         return JSONResponse({"detail": "employee has not storage"}, 404)
 
@@ -85,21 +65,12 @@ def api_post_task_items(
 
     for category, required in requested.items():
         if required <= 0:
-            return JSONResponse(
-                {"detail": f"invalid amount {required} for category {category}"}, 422
-            )
+            return JSONResponse({"detail": f"invalid amount {required} for category {category}"}, 422)
         available = sum(i.amount for i in by_category[category])
         if available == 0:
-            return JSONResponse(
-                {"detail": f"employee has no items with category {category}"}, 404
-            )
+            return JSONResponse({"detail": f"employee has no items with category {category}"}, 404)
         if available < required:
-            return JSONResponse(
-                {
-                    "detail": f"employee only has {available} of category {category} (tried to transfer {required})"
-                },
-                406
-            )
+            return JSONResponse({"detail": f"employee only has {available} of category {category} (tried to transfer {required})"}, 406)
 
     to_transfer_ids: list[int] = []
     for category, required in requested.items():
@@ -121,9 +92,7 @@ def api_post_task_items(
 
 
 @router.delete("/{id}/items/{category_id}", status_code=204)
-def api_delete_task_items(
-    id: int, category_id: int, employee: Employee = Depends(employee_dependency)
-):
+def api_delete_task_items(id: int, category_id: int, employee: Employee = Depends(employee_dependency)):
     if employee.inventory_id is None:
         return JSONResponse({"detail": "employee has not storage"}, 404)
 
@@ -136,9 +105,7 @@ def api_delete_task_items(
 
 
 @router.post("/{id}/comments", status_code=201)
-def api_post_task_comments(
-    id: int, content: str, employee: Employee = Depends(employee_dependency)
-):
+def api_post_task_comments(id: int, content: str, employee: Employee = Depends(employee_dependency)):
     return {"id": add_comment(id, content, employee.id)}
 
 
@@ -154,16 +121,7 @@ async def api_post_task_attachs(id: int, attachs: list[UploadFile]):
         *[
             loop.run_in_executor(
                 None,
-                partial(
-                    upload_attach,
-                    id,
-                    AttachObjectType.task,
-                    (
-                        attach.filename or "image.png",
-                        await attach.read(),
-                        attach.content_type or "image/png"
-                    )
-                )
+                partial(upload_attach, id, AttachObjectType.task, (attach.filename or "image.png", await attach.read(), attach.content_type or "image/png"))
             )
             for attach in attachs
         ]
@@ -171,16 +129,12 @@ async def api_post_task_attachs(id: int, attachs: list[UploadFile]):
 
 
 @router.post("/{id}/get-agreement", status_code=204)
-def api_post_task_get_agreement(
-    id: int, employee: Employee = Depends(employee_dependency)
-):
+def api_post_task_get_agreement(id: int, employee: Employee = Depends(employee_dependency)):
     change_status(id, 16, employee.id)
 
 
 @router.post("/{id}/add-ont", status_code=204)
-def api_post_task_add_ont(
-    id: int, ont_id: int, employee: Employee = Depends(employee_dependency)
-):
+def api_post_task_add_ont(id: int, ont_id: int, employee: Employee = Depends(employee_dependency)):
     if employee.inventory_id is None:
         return JSONResponse({"detail": "employee has not storage"}, 404)
 
@@ -189,12 +143,7 @@ def api_post_task_add_ont(
 
 
 @router.post("/{id}/register-ont", status_code=204)
-def api_post_task_register_ont(
-    id: int,
-    lat: float | None = None,
-    lon: float | None = None,
-    employee: Employee = Depends(employee_dependency)
-):
+def api_post_task_register_ont(id: int, lat: float | None = None, lon: float | None = None, employee: Employee = Depends(employee_dependency)):
     change_status(id, 19, employee.id)
     if lat and lon:
         set_adddata(id, AddataObjectType.task, 7, f"{lat},{lon}")
@@ -205,6 +154,7 @@ def api_post_task_complete(
     id: int,
     discount: str = "Стандарт (0%)",
     extra_services: str = "",
+    special_price: int | None = None,
     solve: str | None = None,
     cost: int | None = None,
     comment: str | None = None,
@@ -225,11 +175,7 @@ def api_post_task_complete(
 
 @router.post("/{id}/start", status_code=204)
 def api_post_task_start(
-    id: int,
-    customer_id: int | None = None,
-    lat: float | None = None,
-    lon: float | None = None,
-    employee: Employee = Depends(employee_dependency)
+    id: int, customer_id: int | None = None, lat: float | None = None, lon: float | None = None, employee: Employee = Depends(employee_dependency)
 ):
     change_status(id, 3, employee.id)
     if lat and lon:
@@ -266,30 +212,16 @@ def api_post_task(
     employee: Employee = Depends(employee_dependency)
 ):
     list_divisions = list(map(int, divisions.split(","))) if divisions else []
-    if (bool(customer_id) and bool(address_id)) or (
-        not bool(customer_id) and not bool(address_id)
-    ):
-        return JSONResponse(
-            {"detail": "only one of customer_id or address_id allowed"}, 422
-        )
+    if (bool(customer_id) and bool(address_id)) or (not bool(customer_id) and not bool(address_id)):
+        return JSONResponse({"detail": "only one of customer_id or address_id allowed"}, 422)
 
-    if customer_id is None and type in (
-        TaskType.repair,
-        TaskType.repair_ravshan,
-        TaskType.uninstall
-    ):
+    if customer_id is None and type in (TaskType.repair, TaskType.repair_ravshan, TaskType.uninstall):
         return JSONResponse({"detail": "customer id is required"}, 422)
 
     if address_id is None and type in (TaskType.repair_magistral, TaskType.magistral):
         return JSONResponse({"detail": "address id (building) is required"}, 422)
 
-    if reason is None and type in (
-        TaskType.repair,
-        TaskType.inactive,
-        TaskType.repair_ravshan,
-        TaskType.repair_magistral,
-        TaskType.magistral
-    ):
+    if reason is None and type in (TaskType.repair, TaskType.inactive, TaskType.repair_ravshan, TaskType.repair_magistral, TaskType.magistral):
         return JSONResponse({"detail": "reason is required"}, 422)
 
     # if appeal_phone is None and type in (TaskType.repair, TaskType.inactive, TaskType.repair_ravshan, TaskType.uninstall, TaskType.magistral):
@@ -298,10 +230,7 @@ def api_post_task(
     # if appeal_type is None and type in (TaskType.repair, TaskType.inactive, TaskType.repair_ravshan, TaskType.repair_magistral):
     #     return JSONResponse({"detail": "appeal type is required"}, 422)
 
-    if tariff is None and type in (
-        TaskType.connect_multiflat,
-        TaskType.connect_private
-    ):
+    if tariff is None and type in (TaskType.connect_multiflat, TaskType.connect_private):
         return JSONResponse({"detail": "tariff is required"}, 422)
 
     return {
@@ -333,12 +262,7 @@ def api_get_tasks(
     types = list(map(int, type.split(","))) if type else None
     authors = list(map(int, author_id.split(","))) if author_id else None
 
-    ids = get_task_ids(
-        completed_at_from=completed_at_from,
-        completed_at_to=completed_at_to,
-        type=types,
-        author_id=authors
-    )
+    ids = get_task_ids(completed_at_from=completed_at_from, completed_at_to=completed_at_to, type=types, author_id=authors)
 
     if len(ids) > 500:
         return JSONResponse({"detail": "too wide query"}, 400)
@@ -346,11 +270,7 @@ def api_get_tasks(
     if not ids:
         return []
 
-    tasks = get_tasks(
-        *ids,
-        employee_resolver=lambda id: get_employee_name(db, id),
-        division_resolver=lambda id: get_division_name(db, id)
-    )
+    tasks = get_tasks(*ids, employee_resolver=lambda id: get_employee_name(db, id), division_resolver=lambda id: get_division_name(db, id))
     if get_customers:
         for task in tasks:
             if task.customer_id:
@@ -375,14 +295,7 @@ def api_post_connections(
     customer_id = api_post_customer(name, address, group, phone, phone2)
     if "id" not in customer_id:
         return customer_id  # error
-    task_id = api_post_task(
-        type,
-        customer_id=customer_id["id"],
-        description=description,
-        tariff=tariff,
-        self_assign=self_assign,
-        employee=employee
-    )
+    task_id = api_post_task(type, customer_id=customer_id["id"], description=description, tariff=tariff, self_assign=self_assign, employee=employee)
     if "id" not in task_id:
         return task_id
     return api_get_task(task_id["id"], get_customer=True, db=db)
