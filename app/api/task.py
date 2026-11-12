@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 from app.api import api_call
@@ -27,21 +27,28 @@ def get_task_ids(
     type: list[int] | None = None,
     status: list[int] | None = None,
     author_id: list[int] | None = None,
-    employee_id: int | None = None,
+    employee_ids: list[int] | None = None,
+    division_ids: list[int] | None = None,
     completed_at_from: datetime | None = None,
     completed_at_to: datetime | None = None,
+    planned_to_from: datetime | None = None,
+    planned_to_to: datetime | None = None,
     limit: int | None = None,
     sort: str = "date_finish"
 ) -> list[int]:
     l.info(
-        "get task ids customer_id=%s type=%s status=%s author_id=%s employee_id=%s completed_at_from=%s completed_at_to=%s limit=%s sort=%s",
+        "get task ids customer=%s type=%s status=%s author=%s employees=%s divisions=%s completed_at_from=%s completed_at_to=%s planned_to_from=%s planned_to_to=%s "
+        "limit=%s sort=%s",
         customer_id,
         type,
         status,
         author_id,
-        employee_id,
+        employee_ids,
+        division_ids,
         completed_at_from,
         completed_at_to,
+        planned_to_from,
+        planned_to_to,
         limit,
         sort
     )
@@ -52,20 +59,25 @@ def get_task_ids(
         type_id=",".join(map(str, type)) if type else None,
         state_id=",".join(map(str, status)) if status else None,
         author_employee_id=",".join(map(str, author_id)) if author_id else None,
-        employee_id=employee_id,
+        employee_id=",".join(map(str, employee_ids)) if employee_ids else None,
+        division_id_with_staff=",".join(map(str, division_ids)) if division_ids else None,
         date_finish_from=completed_at_from,
         date_finish_to=completed_at_to,
+        date_do_from=planned_to_from,
+        date_do_to=planned_to_to,
         limit=limit,
         order_by=sort
     )["list"].split(",")
-    if not tasks:
+    if not tasks or not tasks[0]:
         return []
     return [int(task) for task in tasks if task]
 
 
 def get_tasks(*ids: int, employee_resolver: Callable[[int], str | None], division_resolver: Callable[[int], str | None]) -> list[Task]:
     l.info("get tasks ids=%s", ids)
-    tasks = api_call("task", "show", id=",".join(map(str, ids)), timeout=60).get("data")
+    tasks = api_call(
+        "task", "show", id=",".join(map(str, ids)), is_without_views_history=True, is_without_task_statuses_history=True, is_without_history=True, timeout=60
+    ).get("data")
 
     if tasks is None:
         return []
@@ -121,7 +133,7 @@ def add_task(
         "add",
         post=True,
         work_typer=type,
-        work_datedo=datetime.now(),
+        work_datedo=datetime.now() if type in (37, 53, 38, 64, 46, 60) else (datetime.now() + timedelta(days=3)),
         deadline_hour=72,
         division_id=",".join(map(str, divisions)) if divisions else None,
         employee_id=",".join(map(str, employees)) if employees else None,
@@ -138,4 +150,4 @@ def add_task(
 
 def change_status(id: int, status_id: int, author_id: int) -> None:
     l.info("change task status id=%s status=%s auhtor=%s", id, status_id, author_id)
-    api_call("task", "change_state", post=True, id=id, state_id=status_id, employee_id=author_id, nogi="bogi")
+    api_call("task", "change_state", post=True, timeout=120 if status_id == 19 else 30, id=id, state_id=status_id, employee_id=author_id, nogi="bogi")

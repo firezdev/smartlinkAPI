@@ -1,15 +1,18 @@
+from datetime import datetime, time
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 
 from app.api.customer import get_customer
-from app.api.employee import check_creds, get_employee, get_employee_id
+from app.api.employee import check_creds, edit_employee, get_employee, get_employee_id
+from app.api.gps import set_position
 from app.api.inventory import get_employee_items
 from app.api.task import get_task_ids, get_tasks
 from app.db import Session
 from app.db.crud import get_division_name, get_divisions, get_employee_name, set_employee
-from app.models.employee import Employee
+from app.db.models import Employee
 from app.utils.dependencies import db_dependency, employee_dependency
 from app.utils.items import fold_categories
 from app.utils.token import gen_token
@@ -33,13 +36,13 @@ def api_post_login(response: Response, username: str, password: str, db: Session
     return {"id": id}
 
 
-@router.get("/me", response_model=Employee)
+@router.get("/me")
 def api_get_employee_me(employee: Employee = Depends(employee_dependency)):
     return api_get_employee(int(employee.id))
 
 
 @router.get("/me/tasks")
-def api_get_employee_me_tasks(
+def api_get_employee_my_tasks(
     status: str = "",
     type: str = "",
     limit: int | None = None,
@@ -55,7 +58,8 @@ def api_get_employee_me_tasks(
     ids = get_task_ids(
         type=types,
         status=statuses,
-        employee_id=employee.id,
+        employee_ids=[employee.id] if employee.division_id is None else None,
+        division_ids=[employee.division_id] if employee.division_id else None,
         limit=limit,
         sort={"completed_at": "date_finish", "planned_to": "date_do", "created_at": "date_add", "updated_at": "date_change"}[sort]
     )
@@ -76,11 +80,49 @@ def api_get_employee_me_tasks(
 
 
 @router.get("/me/items")
-def api_get_employee_me_items(employee: Employee = Depends(employee_dependency)):
+def api_get_employee_my_items(employee: Employee = Depends(employee_dependency)):
     if employee.inventory_id is None:
         return JSONResponse({"detail": "employee has not storage"}, 404)
 
     return fold_categories(get_employee_items(employee.inventory_id))
+
+
+@router.get("/me/timeline")
+def api_get_my_timeline(db: Session = Depends(db_dependency), employee: Employee = Depends(employee_dependency)):
+    ids = get_task_ids(
+        planned_to_from=datetime.now(ZoneInfo("Asia/Bishkek")).replace(hour=0, minute=0, second=0),
+        planned_to_to=datetime.now(ZoneInfo("Asia/Bishkek")).replace(hour=23, minute=59, second=59),
+        employee_ids=[employee.id] if employee.division_id is None else None,
+        division_ids=[employee.division_id] if employee.division_id else None,
+        sort="date_do"
+    )
+    if len(ids) > 500:
+        return JSONResponse({"detail": "too wide query"}, 400)
+
+    if ids:
+        tasks = get_tasks(*ids, employee_resolver=lambda id: get_employee_name(db, id), division_resolver=lambda id: get_division_name(db, id))
+    else:
+        tasks = []
+    timeline = {}
+    for hour in range(8, 22, 2):
+        task = next((task for task in tasks if task.planned_to.hour == hour), None)
+        print(f"hour {hour}:00 {task.id if task else None}")
+        timeline[time(hour).strftime("%H:%M")] = task
+
+    return timeline
+
+
+@router.post("/me/position", status_code=204)
+def api_post_employee_my_position(
+    lat: float, lon: float, speed: float | None = None, db: Session = Depends(db_dependency), employee: Employee = Depends(employee_dependency)
+):
+    if employee.gps_imei is None:
+        employee.gps_imei = f"smartlinkapi-gps-{employee.id}"
+        assert employee.gps_imei
+        edit_employee(employee.id, gps_imei=employee.gps_imei)
+        db.commit()
+
+    set_position(employee.gps_imei, lat, lon, (speed * 3.6) if speed else None)
 
 
 @router.get("/divisions")
@@ -88,7 +130,7 @@ def api_get_divisions(db: Session = Depends(db_dependency)):
     return get_divisions(db)
 
 
-@router.get("/{id}", response_model=Employee)
+@router.get("/{id}")
 def api_get_employee(id: int):
     employee = get_employee(id)
     if employee is None:

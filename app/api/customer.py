@@ -31,8 +31,13 @@ def search_customers(query: str) -> list[CustomerSearch]:
     for tag in BeautifulSoup(res["data"], "html.parser").find_all("a"):
         if "/customer/" not in tag["href"]:
             continue
-        match = fullmatch(r'<a href="/customer/(\d+)"> <i class="erp-icon far fa-bars"> </i> (\d+) · (.+) - (.+)</a>', tag.prettify().replace("\n", ""))
-        assert match, f"match failed ({tag.prettify().replace('\n', '')})"
+        match = fullmatch(
+            r'<a href="/customer/(\d+)"> <span class="erp_top_search_marker"> </span> <span class="erp_top_search_label" dir="ltr">  (\d+) · (.+) - (.+)</a>',
+            tag.prettify().replace("\n", "")
+        )
+        if not match:
+            l.warning("match failed (%s)", {tag.prettify().replace("\n", "")})
+            continue
 
         data = {"id": match.group(1), "agreement": match.group(2), "full_name": match.group(3), "login": match.group(4)}
         customers.append(CustomerSearch.model_validate(data, context=data))
@@ -52,7 +57,8 @@ def search_customers(query: str) -> list[CustomerSearch]:
 
 def get_building_customers(id: int) -> list[CustomerBuilding]:
     l.info("get building customers id=%s", id)
-    customers = custom_api_call("building/tab_body", json=False, section="customer", id=id)
+    customers = custom_api_call(f"building/{id}", json=False)
+    # customers = custom_api_call(f"building/{id}/tab", json=False, section="customers")
 
     if f"Building #{id} not found" in customers:
         l.error("building not found")
@@ -64,7 +70,16 @@ def get_building_customers(id: int) -> list[CustomerBuilding]:
 def rewrite_sn(id: int, agreement: str, sn: str) -> str | None:
     l.info("rewrite sn id=%s agreement=%s sn=%s", id, agreement, sn)
     res = api_call(
-        "customer", "mark_add", timeout=360, nogi="bogi", mark_id=1, customer_id=id, _command="attach_onu", _onu_serial=sn, _contract_number=agreement
+        "customer",
+        "mark_add",
+        timeout=360,
+        post=True,
+        nogi="bogi",
+        mark_id=1,
+        customer_id=id,
+        _command="attach_onu",
+        _onu_serial=sn,
+        _contract_number=agreement
     )
     if int(res["result"]):
         l.error("fail to rewrite sn: %s", res["msg"])
@@ -74,11 +89,30 @@ def rewrite_sn(id: int, agreement: str, sn: str) -> str | None:
 def rewrite_mac(id: int, agreement: str) -> str | None:
     l.info("rewrite mac id=%s agreement=%s", id, agreement)
     res = api_call(
-        "customer", "mark_add", nogi="bogi", mark_id=1, customer_id=id, _command="renew_mac_address", _userside_customer_id=id, _contract_number=agreement
+        "customer",
+        "mark_add",
+        nogi="bogi",
+        post=True,
+        mark_id=1,
+        customer_id=id,
+        _command="renew_mac_address",
+        _userside_customer_id=id,
+        _contract_number=agreement
     )
     if int(res["result"]):
         l.error("fail to rewrite mac: %s", res["msg"])
         return res["msg"]
+
+
+def add_customer(name: str) -> int:
+    l.info("add customer name=%s", name)
+    return api_call("customer", "add", post=True, is_potential=True, fio=name)["Id"]
+
+
+# TODO э почему тут 2 одинаковых функции
+def edit_customer(id: int, manager_id: int | None = None, group: int | None = None, phone: int | None = None, phone2: int | None = None) -> None:
+    l.info("edit customer id=%s manager_id=%s group=%s phone=%s phone2=%s", id, manager_id, group, phone, phone2)
+    api_call("customer", "edit", post=True, id=id, group_id=group, phone0=phone, phone1=phone2)
 
 
 def update_customer(id: int, phones: list[str]) -> None:

@@ -17,6 +17,8 @@ class Employee(Base):
     name: Mapped[str]
     token: Mapped[str | None]
     inventory_id: Mapped[int | None]
+    gps_imei: Mapped[str | None]
+    division_id: Mapped[int | None]
 
 
 class Division(Base):
