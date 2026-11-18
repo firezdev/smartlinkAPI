@@ -192,3 +192,10 @@ class EthDuplexMode(MultiValueEnum):
 # class HouseType(Enum):
 #     multiflat = "многоэтажный"
 #     private = "частный"
+
+
+class DiscountType(Enum):
+    standart = "Стандарт (0%)"
+    sale = "Скидка (50%)"
+    free = "Акция (100%)"
+    special = "Особое"

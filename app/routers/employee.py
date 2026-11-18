@@ -106,7 +106,7 @@ def api_get_my_timeline(db: Session = Depends(db_dependency), employee: Employee
     timeline = {}
     for hour in range(8, 22, 2):
         task = next((task for task in tasks if task.planned_to.hour == hour), None)
-        print(f"hour {hour}:00 {task.id if task else None}")
+        # print(f"hour {hour}:00 {task.id if task else None}")
         timeline[time(hour).strftime("%H:%M")] = task
 
     return timeline

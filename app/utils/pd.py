@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from enum import Enum
 from json import loads
 from re import fullmatch
 from typing import Annotated, Any, TypeVar, cast
@@ -69,16 +68,18 @@ def coordinates_validator(value: str | dict[str, float] | list[list[float]] | No
     if isinstance(value, list):
         return from_polygon(value)
     if isinstance(value, dict):
+        if not value["lat"] or not value["lon"]:
+            return None
         return [value["lat"], value["lon"]]
 
 
 Coordinates = Annotated[list[float] | None, BeforeValidator(coordinates_validator)]
 
 
-T = TypeVar("T")
+U = TypeVar("U")
 
 
-def list2model_validator(value: list[T] | dict[str, T]) -> T | None:
+def list2model_validator(value: list[U] | dict[str, U]) -> U | None:
     if isinstance(value, list):
         if value:
             return value[0]
@@ -86,7 +87,7 @@ def list2model_validator(value: list[T] | dict[str, T]) -> T | None:
         return next(iter(value.values()), None)
 
 
-list2model = Annotated[T, BeforeValidator(list2model_validator)]
+list2model = Annotated[U, BeforeValidator(list2model_validator)]
 
 
 def addata(id: int, *other_ids: int) -> BeforeValidator:
@@ -117,9 +118,6 @@ def str2list_validator(value: str | None) -> list:
 str2list = Annotated[list, BeforeValidator(str2list_validator)]
 
 
-T = TypeVar("T", bound=Enum)
-
-
 def date2str_serializer(value: date | None) -> str | None:
     if value is None:
         return None
@@ -135,10 +133,7 @@ def datetime2str_serializer(value: datetime | None) -> str | None:
     return value.strftime("%Y.%m.%d %H:%M:%S")
 
 
-T = TypeVar("T", bound=BaseModel)
-
-
-def models2dict_serializer(value: list[T]) -> list[dict[str, Any]]:
+def models2dict_serializer(value: list) -> list[dict[str, Any]]:
     return [cast(BaseModel, item).model_dump() for item in value]
 
 
@@ -146,5 +141,5 @@ def models2dict_serializer(value: list[T]) -> list[dict[str, Any]]:
 str4datetime = Annotated[datetime, PlainValidator(str2datetime_validator), PlainSerializer(datetime2str_serializer)]
 str4date = Annotated[date, PlainValidator(str2date_validator), PlainSerializer(date2str_serializer)]
 
-T = TypeVar("T", bound=BaseModel)
-dict2models = Annotated[list[T], BeforeValidator(dict2list_validator), PlainSerializer(models2dict_serializer)]
+V = TypeVar("V", bound=BaseModel)
+dict2models = Annotated[list[V], BeforeValidator(dict2list_validator), PlainSerializer(models2dict_serializer)]

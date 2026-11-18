@@ -15,7 +15,7 @@ from app.api.inventory import get_employee_items, get_task_items, split_inventor
 from app.api.task import add_comment, add_task, change_status, get_task, get_task_ids, get_tasks
 from app.db.crud import get_division_name, get_employee_name
 from app.db.models import Employee
-from app.enums import AddataObjectType, AttachObjectType, TaskType
+from app.enums import AddataObjectType, AttachObjectType, DiscountType, TaskType
 from app.models.item import Item
 from app.routers.customer import api_post_customer, api_put_customer_coordinates
 from app.utils.dependencies import db_dependency, employee_dependency
@@ -152,25 +152,40 @@ def api_post_task_register_ont(id: int, lat: float | None = None, lon: float | N
 @router.post("/{id}/complete", status_code=204)
 def api_post_task_complete(
     id: int,
-    discount: str = "Стандарт (0%)",
-    extra_services: str = "",
+    discount: str | None = None,  # "str" - deprecated
     special_price: int | None = None,
+    extra_services: str = "",
     solve: str | None = None,
-    cost: int | None = None,
+    cost: int | None = None,  # deprecated
+    price: int | None = None,
     comment: str | None = None,
     employee: Employee = Depends(employee_dependency)
 ):
+    if not price:
+        price = cost
+    if discount:
+        discount_type = DiscountType[discount]
+    else:
+        discount_type = None
+
     if solve:
         set_adddata(id, AddataObjectType.task, 36, solve)
-    if cost:
-        set_adddata(id, AddataObjectType.task, 26, cost)
+    if price:
+        set_adddata(id, AddataObjectType.task, 26, price)
     if extra_services:
         set_adddata(id, AddataObjectType.task, 83, extra_services.split(","))
     if comment:
         set_adddata(id, AddataObjectType.task, 40, comment)
-    if discount:
-        set_adddata(id, AddataObjectType.task, 27, discount)
-    change_status(id, 12, employee.id)
+    if discount_type == DiscountType.special:  # connect - special discount
+        if not special_price:
+            return JSONResponse({"detail": "special price required for special discount"}, 422)
+        set_adddata(id, AddataObjectType.task, 89, special_price)
+    elif discount_type:  # connect - standard discount
+        set_adddata(id, AddataObjectType.task, 27, discount_type.value)
+    elif special_price:  # repair - special discount
+        set_adddata(id, AddataObjectType.task, 90, special_price)
+
+    # change_status(id, 12, employee.id)
 
 
 @router.post("/{id}/start", status_code=204)

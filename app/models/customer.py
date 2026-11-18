@@ -2,7 +2,7 @@ from html import unescape
 from ipaddress import IPv4Address
 from typing import Annotated
 
-from pydantic import Field, ValidationInfo, field_validator, model_validator
+from pydantic import BeforeValidator, Field, ValidationInfo, field_validator, model_validator
 
 from app.enums import CustomerStatus
 from app.models import BaseModel
@@ -10,12 +10,12 @@ from app.models.tariff import Tariff
 from app.utils import storage
 from app.utils.link import make_tgis_link
 from app.utils.mac import format_mac
-from app.utils.pd import Coordinates, NullablePhone, Phone, addata, date2str, int2bool, list2model, list2model_validator, str4date, str4datetime
+from app.utils.pd import NullablePhone, Phone, addata, coordinates_validator, date2str, int2bool, list2model, list2model_validator, str4date, str4datetime
 
 
 class Agreement(BaseModel):
     number: str
-    created_at: str4date = Field(validation_alias="date")
+    created_at: str4date | None = Field(None, validation_alias="date")
 
 
 class Address(BaseModel):
@@ -107,11 +107,15 @@ class CustomerBuilding(CustomerSearch):
         return onu_level
 
 
+_coordinates = Annotated[list[float] | None, BeforeValidator(coordinates_validator), addata(7)]
+addata_default = Field(None, validate_default=True)
+
+
 class Customer(CustomerSearch):
     created_at: str4datetime = Field(validation_alias="date_create")
     connected_at: str4date | None = Field(validation_alias="date_connect")
     last_positive_balance_at: str4date = Field(validation_alias="date_positive_balance")
-    last_active_at: str4datetime = Field(validation_alias="date_activity")
+    last_active_at: str4datetime | None = Field(None, validation_alias="date_activity")
     disconnect_at: date2str | None = None  # always none, can be manually filled after validation
 
     is_corporate: bool = Field(False, validation_alias="flag_corporate")
@@ -122,23 +126,23 @@ class Customer(CustomerSearch):
     phone: NullablePhone = Field(None, validate_default=True, validation_alias="phone_that_will_definitely_not_exists")
 
     address: Address | None = None
-    group: Group | None = Field(None, validate_default=True)
-    coordinates: Coordinates | None = None
-    tgis_link: _tgis_link = Field(None, validate_default=True)
+    group: Group | None = addata_default
+    coordinates: _coordinates | None = None
+    tgis_link: _tgis_link = addata_default
 
     status: CustomerStatus = Field(validation_alias="state_id")
-    agreement: list2model[Agreement] | None
+    agreement: list2model[Agreement] | None  # ty: ignore
     has_billing: int2bool = Field(validation_alias="is_in_billing")
     balance: float = 0
     tariffs: list[Tariff] = Field(validation_alias="tariff")
 
-    ip: IPv4Address | None = Field(None, validate_default=True)
-    mac: str | None = Field(None, validate_default=True)
+    ip: IPv4Address | None = addata_default
+    mac: str | None = addata_default
     olt_id: int | None = None  # always none, can be manually filled after validation
 
     manager_id: int | None = None
     comment: str | None = Field(None, validation_alias="comment2")
-    connect_type: _connect_type | None = Field(None, validate_default=True)
+    connect_type: _connect_type | None = addata_default
 
     @field_validator("address", mode="before")
     @classmethod
