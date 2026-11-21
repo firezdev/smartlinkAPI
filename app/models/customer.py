@@ -151,9 +151,12 @@ class Customer(CustomerSearch):
 
     @field_validator("coordinates", mode="after")
     @classmethod
-    def validate_coordinates(cls, coordinates: list[float] | None, info: ValidationInfo):
+    def validate_coordinates(cls, coords: list[float] | None, info: ValidationInfo):
         assert info.context
-        return coordinates or list(map(float, addata(7).func(info.context["additional_data"], info).split(",")))  # ty: ignore
+        addata_coords = addata(7).func(info.context["additional_data"], info)  # ty: ignore
+        if addata_coords and "," in addata_coords:
+            return list(map(float, addata_coords.split(",")))
+        return coords
 
     @field_validator("agreement", mode="before")
     @classmethod
