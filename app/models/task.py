@@ -38,7 +38,7 @@ class Comment(BaseModel):
     id: int
     created_at: str4datetime = Field(validation_alias="dateAdd")
     author: EmployeeName | None = Field(None, validation_alias="employee_id")
-    content: str = Field(validation_alias="comment")
+    content: str | None = Field(validation_alias="comment")
 
     @field_validator("author", mode="before")
     @classmethod
@@ -49,7 +49,7 @@ class Comment(BaseModel):
 
     @model_validator(mode="after")
     def validate_model(self):
-        if self.content.startswith("<b>BGB ERROR</b>"):
+        if self.content and self.content.startswith("<b>BGB ERROR</b>"):
             self.author = EmployeeName(id=0, name="Биллинг")
             self.content = self.content.split("<b>BGB ERROR</b>: ")[-1]
         return self
